@@ -85,17 +85,15 @@ def _est_to_utc(dt):
 def _to_dataframe(data, ticker, eventDatetime):
     "Convert list of dicts of time-series price data to pandas dataframe"
     result = pd.DataFrame.from_dict(data)
-    result['time']          = [_utc_to_est(x) for x in result['time']]
-    result['ticker']        = ticker
-    result['eventDatetime'] = eventDatetime
-    return result.set_index('time')
+    result['tradeTime']  = [_utc_to_est(x) for x in result['time']]
+    result['Ticker']        = ticker
+    result['eventDateTime'] = eventDatetime
+    return result[['Ticker', 'eventDateTime', 'tradeTime', 'close']]#.set_index('time')
 
 
-def request_price_data(tickers, eventDatetimes):
+def request_price_data(tickers, eventDatetimes, num_days=10, interval=1):
     global options
-
     sessionOptions = blpapi.SessionOptions()
-
     try:
         options = parseCmdLine()
         # Fill SessionOptions
@@ -104,12 +102,10 @@ def request_price_data(tickers, eventDatetimes):
     except:
         host = 'localhost'
         port = 8194
-
     sessionOptions.setServerHost(host)
     sessionOptions.setServerPort(port)
 
     print("\n\nConnecting to %s:%d\n" % (host, port))
-
     # Create a Session
     session = blpapi.Session(sessionOptions)
 
@@ -117,7 +113,6 @@ def request_price_data(tickers, eventDatetimes):
     if not session.start():
         print("Failed to start session.")
         return
-
     if not session.openService("//blp/refdata"):
         print("Failed to open //blp/refdata")
         return
@@ -126,13 +121,14 @@ def request_price_data(tickers, eventDatetimes):
     request = refDataService.createRequest("IntradayBarRequest")
 
     request.set("eventType", "TRADE") # last price
-    request.set("interval", 1)  # bar interval in minutes
+    request.set("interval", interval)  # bar interval in minutes
 
     final_result = []
-    for ticker, eventDatetime in zip(tickers, eventDatetimes):
-        print('Pulling data for event that happened at %s with %s' % (eventDatetime, ticker))
+    num_events = len(tickers)
+    for i, (ticker, eventDatetime) in enumerate(zip(tickers, eventDatetimes)):
+        print('%d/%d:  Pulling data for event that happened at %s with %s' % ((i+1), num_events, eventDatetime, ticker))
         request.set("startDateTime", eventDatetime)
-        request.set("endDateTime"  , getEndDate(eventDatetime, 10))
+        request.set("endDateTime"  , getEndDate(eventDatetime, num_days))
         request.set("security", ticker + " Equity")
         session.sendRequest(request)
 
